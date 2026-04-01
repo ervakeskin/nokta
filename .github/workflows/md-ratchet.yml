@@ -39,40 +39,61 @@ jobs:
           cd main-branch
           MAIN_SCORES=$(python scripts/section_score.py --all --md-file mobile.md 2>/dev/null | grep "TOTAL AVERAGE" | grep -oP '\d+' || echo "0")
           echo "total=$MAIN_SCORES" >> $GITHUB_OUTPUT
-          # Score each section individually and save
+          SECTION_MAP="{"
           for i in $(seq 0 12); do
             SEC_SCORE=$(python scripts/section_score.py --section $i --md-file mobile.md 2>/dev/null | grep "Score:" | grep -oP '\d+' | head -1 || echo "0")
             echo "section_${i}=${SEC_SCORE}" >> $GITHUB_OUTPUT
+            if [ "$i" -gt 0 ]; then
+              SECTION_MAP+=" ,"
+            fi
+            SECTION_MAP+="\"section_${i}\":${SEC_SCORE}"
           done
+          SECTION_MAP+="}"
+          echo "sections=$SECTION_MAP" >> $GITHUB_OUTPUT
 
       - name: Score PR branch
         id: pr_score
         run: |
           PR_SCORES=$(python scripts/section_score.py --all --md-file mobile.md 2>/dev/null | grep "TOTAL AVERAGE" | grep -oP '\d+' || echo "0")
           echo "total=$PR_SCORES" >> $GITHUB_OUTPUT
-          # Generate CI comment
           python scripts/section_score.py --all --ci-comment --md-file mobile.md > /tmp/score_report.md
-          # Score each section individually
-          REGRESSION=false
+          SECTION_MAP="{"
           for i in $(seq 0 12); do
             SEC_SCORE=$(python scripts/section_score.py --section $i --md-file mobile.md 2>/dev/null | grep "Score:" | grep -oP '\d+' | head -1 || echo "0")
             echo "section_${i}=${SEC_SCORE}" >> $GITHUB_OUTPUT
+            if [ "$i" -gt 0 ]; then
+              SECTION_MAP+=" ,"
+            fi
+            SECTION_MAP+="\"section_${i}\":${SEC_SCORE}"
           done
+          SECTION_MAP+="}"
+          echo "sections=$SECTION_MAP" >> $GITHUB_OUTPUT
 
       - name: Check for regressions
         id: regression
+        env:
+          MAIN_SECTIONS: ${{ steps.main_score.outputs.sections }}
+          PR_SECTIONS: ${{ steps.pr_score.outputs.sections }}
         run: |
-          REGRESSION=false
-          for i in $(seq 0 12); do
-            MAIN_VAL="${{ steps.main_score.outputs[format('section_{0}', i)] }}"
-            PR_VAL="${{ steps.pr_score.outputs[format('section_{0}', i)] }}"
-            MAIN_VAL=${MAIN_VAL:-0}
-            PR_VAL=${PR_VAL:-0}
-            if [ "$PR_VAL" -lt "$MAIN_VAL" ]; then
-              REGRESSION=true
-              echo "⚠️ Section $i regressed: $MAIN_VAL → $PR_VAL"
-            fi
-          done
+          python <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          main_sections = json.loads(os.environ.get("MAIN_SECTIONS") or "{}")
+          pr_sections = json.loads(os.environ.get("PR_SECTIONS") or "{}")
+
+          regression = False
+          for section in sorted(main_sections.keys()):
+              main_val = int(main_sections.get(section, 0) or 0)
+              pr_val = int(pr_sections.get(section, 0) or 0)
+              if pr_val < main_val:
+                  print(f"⚠️  {section} regressed: {main_val} → {pr_val}")
+                  regression = True
+
+          Path("regression.flag").write_text("true" if regression else "false")
+          PY
+          REGRESSION=$(cat regression.flag)
           echo "detected=$REGRESSION" >> $GITHUB_OUTPUT
 
       - name: Post score comment
@@ -96,7 +117,7 @@ jobs:
   auto-merge:
     needs: score
     runs-on: ubuntu-latest
-    if: success()
+    if: success() && !github.event.pull_request.draft
     steps:
       - name: Enable auto-merge
         uses: peter-evans/enable-pull-request-automerge@v3
