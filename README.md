@@ -10,6 +10,10 @@
 
 ## How It Works?
 
+There are two ways to contribute:
+
+### Path A — Develop a section of `mobile.md`
+
 ```
 Pick a section
     ↓
@@ -28,6 +32,27 @@ Fix, push, try again
 ```
 
 **No human review. The metric decides. Score never drops.**
+
+### Path B — Propose a new feature spec
+
+```
+Copy specs/TEMPLATE.md → specs/your-feature.md
+    ↓
+Open a branch: spec/your-feature
+    ↓
+Fill in all 5 sections, delete all > TODO lines
+    ↓
+Open a PR
+    ↓
+CI scores against spec_generic.yml (0-100)
+    ↓
+First PR for this file → ✅ Establishes baseline on main
+Subsequent PRs → must match or beat the baseline
+    ↓
+Fix, push, try again
+```
+
+**Same ratchet. Score never drops. First merge sets the bar.**
 
 ## Quick Start
 
@@ -85,19 +110,62 @@ Each section has a checklist (`checklists/section_XX.yml`). CI reads this checkl
 ### Test Locally
 
 ```bash
-# Single section
+# Single section (Path A)
 python scripts/section_score.py --section 4
 
-# All sections
+# All sections (Path A)
 python scripts/section_score.py --all
 
-# CI-formatted output
+# CI-formatted output (Path A)
 python scripts/section_score.py --all --ci-comment
+
+# Score a spec file (Path B)
+python scripts/section_score.py --spec-file specs/your-feature.md
 ```
+
+## Spec Contributions (Path B)
+
+Use Path B to propose a new Nokta mobile app feature as a standalone spec.
+
+```bash
+# 1. Copy the template
+cp specs/TEMPLATE.md specs/your-feature-name.md
+
+# 2. Create a branch
+git checkout -b spec/your-feature-name
+
+# 3. Fill in all 5 sections, then delete every > TODO line
+
+# 4. Check your score locally
+python scripts/section_score.py --spec-file specs/your-feature-name.md
+
+# 5. Commit + push
+git add specs/your-feature-name.md
+git commit -m "spec(your-feature): describe feature"
+git push origin spec/your-feature-name
+
+# 6. Open a PR → spec-ratchet CI runs automatically
+```
+
+### Spec Checklist (`checklists/spec_generic.yml`)
+
+| Check | Weight | Description |
+|-------|--------|-------------|
+| `identity_section` | 20pt | `## 1. IDENTITY` section present |
+| `non_goals_min` | 15pt | At least 5 non-goal items listed |
+| `non_goals_section` | 5pt | `## 2. NON-GOALS` section present |
+| `data_contracts_section` | 15pt | `## 3. DATA CONTRACTS` section present |
+| `typescript_blocks` | 10pt | TypeScript code block in DATA CONTRACTS |
+| `objective_function_section` | 15pt | `## 4. OBJECTIVE FUNCTION` section present |
+| `scalar_metric` | 10pt | Scalar metric or formula defined |
+| `ratchet_rule_section` | 5pt | `## 5. RATCHET RULE` section present |
+| `no_todos_remaining` | 5pt | No `> TODO:` placeholders left |
+
+**Ratchet rule:** First PR for a new spec file — passes with any score > 0. Subsequent PRs for the same spec file — must match or beat the score on main.
 
 ## Rules
 
-1. **Only edit `mobile.md`.** Do not edit checklist YAMLs, the CI workflow, or scripts — these are IMMUTABLE INFRA.
+1. **Only edit `mobile.md` (Path A) or add a new `specs/*.md` file (Path B).** Do not edit checklist YAMLs, CI workflows, or scripts — these are IMMUTABLE INFRA.
 2. **Section 1 (IDENTITY) is already complete.** Use it as a reference and follow its format.
 3. **Multiple people can write the same section.** The highest score gets merged.
 4. **Delete TODO placeholders.** As long as `> TODO:` lines remain, the section score stays low.
